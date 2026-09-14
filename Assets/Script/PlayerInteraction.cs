@@ -20,6 +20,14 @@ public class PlayerInteraction : NetworkBehaviour
 
         HandlePickup();
         HandleThrowing();
+
+        if (heldPackage != null && holdPosition != null)
+        {
+            Vector3 targetLocalPos = transform.InverseTransformPoint(holdPosition.position);
+            Quaternion targetLocalRot = Quaternion.Inverse(transform.rotation) * holdPosition.rotation;
+
+            SyncPackagePositionServerRpc(heldPackageNetObj, targetLocalPos, targetLocalRot);
+        }
     }
 
     void HandlePickup()
@@ -47,12 +55,7 @@ public class PlayerInteraction : NetworkBehaviour
     {
         if (packageRef.TryGet(out NetworkObject packageObj))
         {
-            // Gunakan Network Parenting agar paket terlihat oleh semua player di jaringan
             packageObj.TrySetParent(transform);
-
-            // Sesuaikan posisi lokal agar menempel rapi di depan player
-            packageObj.transform.localPosition = new Vector3(0f, 0f, 1.5f);
-            packageObj.transform.localRotation = Quaternion.identity;
 
             Rigidbody rb = packageObj.GetComponent<Rigidbody>();
             if (rb != null)
@@ -60,6 +63,16 @@ public class PlayerInteraction : NetworkBehaviour
                 rb.isKinematic = true;
                 rb.detectCollisions = false;
             }
+        }
+    }
+
+    [ServerRpc]
+    void SyncPackagePositionServerRpc(NetworkObjectReference packageRef, Vector3 localPos, Quaternion localRot)
+    {
+        if (packageRef.TryGet(out NetworkObject packageObj))
+        {
+            packageObj.transform.localPosition = localPos;
+            packageObj.transform.localRotation = localRot;
         }
     }
 
@@ -76,7 +89,7 @@ public class PlayerInteraction : NetworkBehaviour
         if (Input.GetMouseButtonUp(0))
         {
             Vector3 throwDirection = playerCamera != null ? playerCamera.transform.forward : transform.forward;
-            Vector3 throwForceVector = heldPackage.isFragile ? Vector3.zero : throwDirection * currentThrowForce;
+            Vector3 throwForceVector = heldPackage.isFragile ? throwDirection * 2f : throwDirection * currentThrowForce;
 
             ReleasePackageServerRpc(heldPackageNetObj, throwForceVector);
 
@@ -91,7 +104,6 @@ public class PlayerInteraction : NetworkBehaviour
     {
         if (packageRef.TryGet(out NetworkObject packageObj))
         {
-            // Lepas dari parent jaringan
             packageObj.TryRemoveParent();
 
             Rigidbody rb = packageObj.GetComponent<Rigidbody>();
