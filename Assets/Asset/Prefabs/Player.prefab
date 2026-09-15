@@ -108,14 +108,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 4108751592
-  InScenePlacedSourceGlobalObjectIdHash: 0
+  GlobalObjectIdHash: 1082320965
+  InScenePlacedSourceGlobalObjectIdHash: 4108751592
   m_InScenePlacedDisabledByDefault: 0
   DeferredDespawnTick: 0
   Ownership: 1
   AlwaysReplicateAsRoot: 0
   SynchronizeTransform: 1
-  m_InScenePlaced: 0
+  m_InScenePlaced: 1
   ActiveSceneSynchronization: 0
   SceneMigrationSynchronization: 0
   SpawnWithObservers: 1
@@ -156,9 +156,19 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   controller: {fileID: 8168555120492415843}
   speed: 12
-  mouseSensitivity: 200
+  crouchSpeed: 1.84
+  jumpHeight: 1.5
+  gravity: -9.81
+  mouseSensitivity: 113.1
   playerBody: {fileID: 3261212924931175376}
   playerCamera: {fileID: 4914465296059500683}
+  standingHeight: 2
+  crouchHeight: 1
+  isCrouching:
+    UpdateTraits:
+      MinSecondsBetweenUpdates: 0
+      MaxSecondsBetweenUpdates: 0
+    m_InternalValue: 0
 --- !u!143 &8168555120492415843
 CharacterController:
   m_ObjectHideFlags: 0

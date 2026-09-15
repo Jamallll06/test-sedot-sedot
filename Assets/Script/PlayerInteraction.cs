@@ -1,6 +1,5 @@
 using UnityEngine;
 using Unity.Netcode;
-using Unity.Netcode.Components;
 
 public class PlayerInteraction : NetworkBehaviour
 {
@@ -18,7 +17,7 @@ public class PlayerInteraction : NetworkBehaviour
     {
         if (!IsOwner) return;
 
-        HandlePickup();
+        HandleInteract(); // Menggantikan fungsi HandlePickup
         HandleThrowing();
 
         if (heldPackage != null && holdPosition != null)
@@ -30,21 +29,40 @@ public class PlayerInteraction : NetworkBehaviour
         }
     }
 
-    void HandlePickup()
+    void HandleInteract()
     {
-        if (Input.GetKeyDown(KeyCode.E) && heldPackage == null)
+        if (Input.GetKeyDown(KeyCode.E))
         {
             if (playerCamera == null) return;
 
             RaycastHit hit;
             if (Physics.Raycast(playerCamera.transform.position, playerCamera.transform.forward, out hit, pickupRange))
             {
-                Package pkg = hit.collider.GetComponent<Package>();
-                if (pkg != null)
+                // KONDISI 1: Tangan Kosong -> Ambil Paket
+                if (heldPackage == null)
                 {
-                    heldPackage = pkg;
-                    heldPackageNetObj = pkg.GetComponent<NetworkObject>();
-                    RequestPickupServerRpc(heldPackageNetObj);
+                    Package pkg = hit.collider.GetComponent<Package>();
+                    if (pkg != null)
+                    {
+                        heldPackage = pkg;
+                        heldPackageNetObj = pkg.GetComponent<NetworkObject>();
+                        RequestPickupServerRpc(heldPackageNetObj);
+                    }
+                }
+                // KONDISI 2: Sedang Membawa Paket -> Taruh ke Rak
+                else
+                {
+                    ShelfSlot slot = hit.collider.GetComponent<ShelfSlot>();
+                    if (slot != null && !slot.IsOccupied())
+                    {
+                        // Taruh paket di titik slot rak tersebut
+                        PlacePackageServerRpc(heldPackageNetObj, slot.transform.position, slot.transform.rotation);
+
+                        // Kosongkan tangan pemain
+                        heldPackage = null;
+                        heldPackageNetObj = null;
+                        currentThrowForce = 0f;
+                    }
                 }
             }
         }
@@ -61,7 +79,7 @@ public class PlayerInteraction : NetworkBehaviour
             if (rb != null)
             {
                 rb.isKinematic = true;
-                rb.detectCollisions = false;
+                rb.detectCollisions = false; // Matikan fisik agar tidak nabrak saat dipegang
             }
         }
     }
@@ -73,6 +91,27 @@ public class PlayerInteraction : NetworkBehaviour
         {
             packageObj.transform.localPosition = localPos;
             packageObj.transform.localRotation = localRot;
+        }
+    }
+
+    // FUNGSI BARU: Menaruh paket ke rak secara sinkron di server
+    [ServerRpc]
+    void PlacePackageServerRpc(NetworkObjectReference packageRef, Vector3 slotPosition, Quaternion slotRotation)
+    {
+        if (packageRef.TryGet(out NetworkObject packageObj))
+        {
+            packageObj.TryRemoveParent(); // Lepas paket dari tangan pemain
+
+            // Snap (kunci) posisi paket ke tengah kotak rak
+            packageObj.transform.position = slotPosition;
+            packageObj.transform.rotation = slotRotation;
+
+            Rigidbody rb = packageObj.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.isKinematic = true; // Kunci fisik agar paket tidak jatuh/tergeser dari rak
+                rb.detectCollisions = true; // NYALAKAN KEMBALI collider agar paket bisa di-klik 'E' dan diambil lagi nanti
+            }
         }
     }
 

@@ -3,19 +3,52 @@ using Unity.Netcode;
 
 public class PlayerMovement : NetworkBehaviour
 {
+    [Header("Movement Settings")]
     public CharacterController controller;
     public float speed = 12f;
+    public float crouchSpeed = 5f;
+    public float jumpHeight = 1.5f;
+    public float gravity = -9.81f;
+
+    [Header("Look Settings")]
     public float mouseSensitivity = 200f;
     public Transform playerBody;
     public Camera playerCamera;
 
+    [Header("Crouch Settings")]
+    public float standingHeight = 2f;
+    public float crouchHeight = 1f;
+
     private float xRotation = 0f;
     private Vector3 velocity;
-    private float gravity = -9.81f;
+
+    private Vector3 cameraStandPos;
+    private Vector3 cameraCrouchPos;
+
+    // Variabel baru untuk menyimpan posisi tengah kapsul fisika
+    private Vector3 standCenter;
+    private Vector3 crouchCenter;
+
+    public NetworkVariable<bool> isCrouching = new NetworkVariable<bool>(
+        false,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Owner
+    );
 
     public override void OnNetworkSpawn()
     {
-        Debug.Log($"Player Spawned. ID: {OwnerClientId}, IsOwner: {IsOwner}");
+        if (playerCamera != null)
+        {
+            cameraStandPos = playerCamera.transform.localPosition;
+            cameraCrouchPos = new Vector3(cameraStandPos.x, cameraStandPos.y - (standingHeight - crouchHeight) / 2f, cameraStandPos.z);
+        }
+
+        // Simpan center awal dan kalkulasi center saat jongkok agar telapak kaki tetap di tanah
+        if (controller != null)
+        {
+            standCenter = controller.center;
+            crouchCenter = standCenter + new Vector3(0, (crouchHeight - standingHeight) / 2f, 0);
+        }
 
         if (!IsOwner)
         {
@@ -38,6 +71,28 @@ public class PlayerMovement : NetworkBehaviour
 
             if (controller != null) controller.enabled = true;
         }
+
+        isCrouching.OnValueChanged += HandleCrouchStateChanged;
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        isCrouching.OnValueChanged -= HandleCrouchStateChanged;
+    }
+
+    void HandleCrouchStateChanged(bool previousValue, bool newValue)
+    {
+        if (controller != null)
+        {
+            // Terapkan tinggi dan center yang benar
+            controller.height = newValue ? crouchHeight : standingHeight;
+            controller.center = newValue ? crouchCenter : standCenter;
+        }
+
+        if (playerCamera != null)
+        {
+            playerCamera.transform.localPosition = newValue ? cameraCrouchPos : cameraStandPos;
+        }
     }
 
     void Update()
@@ -45,7 +100,25 @@ public class PlayerMovement : NetworkBehaviour
         if (!IsClient || !IsOwner) return;
 
         HandleMouseLook();
+        HandleInput();
         HandleMovement();
+    }
+
+    void HandleInput()
+    {
+        if (Input.GetKeyDown(KeyCode.Space) && controller.isGrounded)
+        {
+            velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+        }
+
+        if (Input.GetKeyDown(KeyCode.LeftControl))
+        {
+            isCrouching.Value = true;
+        }
+        else if (Input.GetKeyUp(KeyCode.LeftControl))
+        {
+            isCrouching.Value = false;
+        }
     }
 
     void HandleMouseLook()
@@ -56,7 +129,6 @@ public class PlayerMovement : NetworkBehaviour
         xRotation -= mouseY;
         xRotation = Mathf.Clamp(xRotation, -90f, 90f);
 
-        // DIPERBAIKI: Hapus perbandingan 'long.MinValue' yang salah
         if (playerCamera != null)
         {
             playerCamera.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
@@ -73,15 +145,12 @@ public class PlayerMovement : NetworkBehaviour
         float x = Input.GetAxis("Horizontal");
         float z = Input.GetAxis("Vertical");
 
-        if (x != 0 || z != 0)
-        {
-            Debug.Log($"Input terdeteksi - X: {x}, Z: {z}");
-        }
-
         if (controller == null) return;
 
+        float currentSpeed = isCrouching.Value ? crouchSpeed : speed;
+
         Vector3 move = playerBody.right * x + playerBody.forward * z;
-        controller.Move(move * speed * Time.deltaTime);
+        controller.Move(move * currentSpeed * Time.deltaTime);
 
         if (!controller.isGrounded)
         {
